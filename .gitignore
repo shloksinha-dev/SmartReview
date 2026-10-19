@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyd
+*.pyo
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+.env.local
+
+# Secrets and credentials
+.env
+.streamlit/secrets.toml
+
+# Model artifacts (large files — re-generate with train_pipeline.py)
+# Uncomment the line below to exclude models from version control.
+# models/*.joblib
+
+# Generated evaluation files
+# models/evaluation_results.json
+
+# Streamlit cache
+.streamlit/cache/
+__streamlitcache__/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/

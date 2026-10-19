@@ -1,0 +1,10 @@
+{
+  "training_samples": 69,
+  "classes": [
+    "negative",
+    "positive"
+  ],
+  "random_state": 42,
+  "test_size": 0.2,
+  "dataset": "bundled sample"
+}

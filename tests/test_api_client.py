@@ -157,7 +157,7 @@ class TestAPIClientCallHandling:
 
     def test_call_api_model_unavailable_error(self):
         """404 or model not found error should return distinct model unavailable message."""
-        client = APIClient()
+        client = APIClient(initial_delay=0.0)
         client._client = MagicMock()
         mock_exc = Exception("404 NOT_FOUND: models/gemini-2.5-flash is not available to new users")
         mock_exc.code = 404
@@ -169,9 +169,11 @@ class TestAPIClientCallHandling:
         assert "gemini-3.8-flash" in res["error"]
         assert "Authentication failed" not in res["error"]
         assert "Quota" not in res["error"]
+        # Permanent 404 should not retry: only 1 attempt
+        assert client._client.models.generate_content.call_count == 1
 
     def test_call_api_auth_error(self):
-        client = APIClient()
+        client = APIClient(initial_delay=0.0)
         client._client = MagicMock()
         mock_exc = Exception("API_KEY_INVALID: 401 UNAUTHENTICATED")
         mock_exc.code = 401
@@ -181,9 +183,11 @@ class TestAPIClientCallHandling:
         assert res["raw"] is None
         assert "Authentication failed" in res["error"]
         assert "Model unavailable" not in res["error"]
+        # Permanent 401 should not retry: only 1 attempt
+        assert client._client.models.generate_content.call_count == 1
 
     def test_call_api_quota_rate_limit(self):
-        client = APIClient()
+        client = APIClient(max_retries=1, initial_delay=0.0)
         client._client = MagicMock()
         mock_exc = Exception("RESOURCE_EXHAUSTED: Quota exceeded")
         mock_exc.code = 429
@@ -193,9 +197,11 @@ class TestAPIClientCallHandling:
         assert res["raw"] is None
         assert "quota or rate limit" in res["error"].lower()
         assert "Model unavailable" not in res["error"]
+        # Retried: initial + 1 retry = 2 attempts
+        assert client._client.models.generate_content.call_count == 2
 
     def test_call_api_server_error(self):
-        client = APIClient()
+        client = APIClient(max_retries=1, initial_delay=0.0)
         client._client = MagicMock()
         mock_exc = Exception("503 Service Unavailable")
         mock_exc.code = 503
@@ -204,12 +210,93 @@ class TestAPIClientCallHandling:
         res = client._call_api("Nice product")
         assert res["raw"] is None
         assert "server error" in res["error"].lower()
+        assert client._client.models.generate_content.call_count == 2
 
     def test_call_api_timeout_error(self):
-        client = APIClient()
+        client = APIClient(max_retries=1, initial_delay=0.0)
         client._client = MagicMock()
         client._client.models.generate_content.side_effect = TimeoutError("Connection timed out")
 
         res = client._call_api("Nice product")
         assert res["raw"] is None
         assert "network error" in res["error"].lower()
+        assert client._client.models.generate_content.call_count == 2
+
+
+class TestAPIClientRetries:
+    """Test bounded retries and exponential backoff behavior."""
+
+    def test_retry_succeeds_on_second_attempt_after_503(self):
+        """Transient 503 fails on attempt 1, then succeeds on attempt 2."""
+        client = APIClient(max_retries=2, initial_delay=0.0)
+        client._client = MagicMock()
+
+        err_503 = Exception("503 Service Unavailable - upstream model overloaded")
+        err_503.code = 503
+
+        mock_resp = MagicMock()
+        mock_resp.text = json.dumps({"label": "positive", "explanation": "Recovered."})
+
+        client._client.models.generate_content.side_effect = [err_503, mock_resp]
+
+        res = client._call_api("Great service!")
+        assert res["error"] is None
+        assert res["raw"] == mock_resp.text
+        assert client._client.models.generate_content.call_count == 2
+
+    def test_retry_exhausted_after_continuous_503(self):
+        """Continuous 503 exhausts max_retries and returns clear attempt count."""
+        client = APIClient(max_retries=2, initial_delay=0.0)
+        client._client = MagicMock()
+
+        err_503 = Exception("503 Service Unavailable")
+        err_503.code = 503
+        client._client.models.generate_content.side_effect = err_503
+
+        res = client._call_api("Great service!")
+        assert res["raw"] is None
+        assert "503" in res["error"]
+        assert "3 attempt(s)" in res["error"]
+        assert client._client.models.generate_content.call_count == 3
+
+    def test_no_duplicate_retries_when_sdk_already_retrying(self):
+        """When SDK has retry_options configured with attempts > 1, wrapper does not double-retry."""
+        client = APIClient(max_retries=2, initial_delay=0.0)
+        client._client = MagicMock()
+
+        # Mock SDK HTTP options with active retry options
+        mock_retry_opts = MagicMock()
+        mock_retry_opts.attempts = 3
+        mock_http_opts = MagicMock()
+        mock_http_opts.retry_options = mock_retry_opts
+        mock_api_client = MagicMock()
+        mock_api_client._http_options = mock_http_opts
+        client._client._api_client = mock_api_client
+
+        err_503 = Exception("503 Service Unavailable")
+        err_503.code = 503
+        client._client.models.generate_content.side_effect = err_503
+
+        res = client._call_api("Great service!")
+        # Wrapper should delegate retries to SDK and not loop multiple times
+        assert client._client.models.generate_content.call_count == 1
+        assert "server error" in res["error"].lower()
+
+    @patch("time.sleep")
+    def test_exponential_backoff_timing(self, mock_sleep):
+        """Verify delays double exponentially up to max_delay."""
+        client = APIClient(max_retries=3, initial_delay=1.0, backoff_factor=2.0, max_delay=3.0)
+        client._client = MagicMock()
+
+        err_503 = Exception("503 Service Unavailable")
+        err_503.code = 503
+        client._client.models.generate_content.side_effect = err_503
+
+        client._call_api("Test backoff")
+        # Attempt 1 failed -> sleep(1.0), next delay min(2.0, 3.0) = 2.0
+        # Attempt 2 failed -> sleep(2.0), next delay min(4.0, 3.0) = 3.0
+        # Attempt 3 failed -> sleep(3.0)
+        assert mock_sleep.call_count == 3
+        expected_calls = [pytest.approx(1.0), pytest.approx(2.0), pytest.approx(3.0)]
+        actual_calls = [call.args[0] for call in mock_sleep.call_args_list]
+        assert actual_calls == expected_calls

@@ -97,7 +97,7 @@ def main():
     print(f"  Test samples     : {len(test_df)}\n")
 
     # ── Train ────────────────────────────────────────────────────────────────
-    print("  Training pipeline…")
+    print("  Training pipeline...")
     pipeline = train(
         train_df["text"].tolist(),
         train_df["label"].tolist(),
@@ -107,34 +107,67 @@ def main():
             "dataset": args.data or "bundled sample",
         },
     )
-    print("  ✓ Pipeline trained and saved.\n")
+    print("  [OK] Pipeline trained and saved.\n")
 
     # ── Evaluate ─────────────────────────────────────────────────────────────
     if len(test_df) == 0:
-        print("  ⚠ No test samples available — skipping evaluation.")
+        print("  [WARN] No test samples available - skipping evaluation.")
         return
 
-    print("  Evaluating on held-out test set…")
+    print("  Evaluating on held-out test set and cross-validating...")
     results = evaluate_pipeline(
         pipeline,
         test_df["text"].tolist(),
         test_df["label"].tolist(),
         save=True,
+        train_texts=train_df["text"].tolist(),
+        train_labels=train_df["label"].tolist(),
+        cv_folds=5,
     )
 
-    print("\n" + "="*50)
-    print(f"  EVALUATION RESULTS  (test n={results['test_samples']})")
-    print("="*50)
-    print(f"  Accuracy  : {results['accuracy']:.4f}")
-    print(f"  Precision : {results['precision']:.4f}")
-    print(f"  Recall    : {results['recall']:.4f}")
-    print(f"  F1        : {results['f1']:.4f}")
-    print(f"\n  Per-class report:\n")
+    print("\n" + "="*58)
+    print(f"  HELD-OUT TEST SET EVALUATION  (test n={results['test_samples']})")
+    print("="*58)
+    print(f"  Accuracy (Test)       : {results['accuracy']:.4f}")
+    print(f"  F1 Score (Weighted)   : {results['f1']:.4f}")
+    print(f"  F1 Score (Macro)      : {results['macro_f1']:.4f}")
+    print(f"  Precision (Weighted)  : {results['precision']:.4f}")
+    print(f"  Recall (Weighted)     : {results['recall']:.4f}")
+
+    if "baseline" in results:
+        base = results["baseline"]
+        print("\n" + "-"*58)
+        print("  BASELINE MODEL COMPARISON (Dummy Classifier)")
+        print("-"*58)
+        print(f"  Strategy              : {base['strategy']}")
+        print(f"  Majority Class        : {base['majority_class']}")
+        print(f"  Baseline Accuracy     : {base['accuracy']:.4f}")
+        print(f"  Baseline Macro F1     : {base['macro_f1']:.4f}")
+        diff_acc = results['accuracy'] - base['accuracy']
+        diff_f1 = results['macro_f1'] - base['macro_f1']
+        print(f"  Diff Accuracy vs Base : {diff_acc:+.4f}")
+        print(f"  Diff Macro F1 vs Base : {diff_f1:+.4f}")
+
+    if "cross_validation" in results:
+        cv = results["cross_validation"]
+        print("\n" + "-"*58)
+        print(f"  STRATIFIED {cv['folds']}-FOLD CROSS-VALIDATION (Training Set)")
+        print("-"*58)
+        print(f"  CV Accuracy           : {cv['accuracy_mean']:.4f} +/- {cv['accuracy_std']:.4f}")
+        print(f"  CV Macro F1           : {cv['f1_macro_mean']:.4f} +/- {cv['f1_macro_std']:.4f}")
+        print(f"  CV Weighted F1        : {cv['f1_weighted_mean']:.4f} +/- {cv['f1_weighted_std']:.4f}")
+
+    print("\n" + "-"*58)
+    print("  PER-CLASS CLASSIFICATION REPORT")
+    print("-"*58)
     print(results["classification_report"])
-    print("="*50)
-    print("\n  NOTE: These metrics reflect performance on the bundled")
-    print("     sample dataset, which is small and curated for demonstration.")
-    print("     Numbers may not generalise to real-world review data.\n")
+    print("="*58)
+    print("\n  METHODOLOGICAL NOTE:")
+    print("  * These metrics reflect the bundled sample demonstration dataset (87 rows).")
+    print("  * The dataset is imbalanced (approx. 72% negative / 28% positive).")
+    print("  * Macro F1 provides a more honest view than accuracy alone because a naive")
+    print("    majority-class guesser matches raw test accuracy on this split.")
+    print("  * Stratified cross-validation guards against single-split variance.\n")
 
 
 if __name__ == "__main__":

@@ -56,3 +56,6 @@ desktop.ini
 # Logs
 *.log
 logs/
+
+# Local coordinator script
+run_smartreview_coordinator.ps1

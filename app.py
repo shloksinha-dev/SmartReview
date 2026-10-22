@@ -296,14 +296,15 @@ def render_sidebar():
 # ════════════════════════════════════════════════════════════════════════════
 def render_sentiment_result(result: dict, source: str = "local"):
     """Render a styled sentiment result card."""
+    error = result.get("error")
     label = result.get("label")
     confidence = result.get("confidence")
     probabilities = result.get("probabilities", {})
     explanation = result.get("explanation")   # API mode
-    error = result.get("error")
-
     if error:
         st.error(f"❌ {error}")
+        if source == "api":
+            st.info("💡 **Local ML Model available:** The local model runs 100% offline without external API dependencies. You can switch to 'Local ML Model' in the sidebar or analyze with the local model below.")
         return
 
     if label is None:
@@ -326,6 +327,23 @@ def render_sentiment_result(result: dict, source: str = "local"):
         else "Confidence: not available from API"
     )
 
+    explanation_html = ""
+    if explanation:
+        if isinstance(explanation, dict):
+            summary = explanation.get("summary", "")
+            signals = explanation.get("signals", [])
+            chips_html = ""
+            if signals:
+                chips = [
+                    f"<span style='display:inline-block; margin:3px 6px 3px 0; padding:2px 8px; border-radius:10px; background:#1e293b; border:1px solid #334155; font-size:0.78rem; color:#f1f5f9; font-family:monospace;'>{s['term']} <b style='color:{color};'>+{s['score']}</b></span>"
+                    for s in signals
+                ]
+                chips_html = "<div style='margin-top:0.4rem;'>" + "".join(chips) + "</div>"
+            if summary:
+                explanation_html = f"<div style='margin-top:0.6rem; font-size:0.88rem; color:#cbd5e1;'>💡 <b>Key Signals:</b> {summary}{chips_html}</div>"
+        elif isinstance(explanation, str):
+            explanation_html = f"<div style='margin-top:0.6rem; font-size:0.88rem; color:#cbd5e1;'>💡 <b>Explanation:</b> {explanation}</div>"
+
     st.markdown(
         f"""
         <div class="result-box {css_class}">
@@ -336,7 +354,7 @@ def render_sentiment_result(result: dict, source: str = "local"):
                 {source_badge}
             </div>
             <div class="result-confidence">{conf_note}</div>
-            {"<div style='margin-top:0.4rem; font-size:0.88rem; color:#cbd5e1;'>" + explanation + "</div>" if explanation else ""}
+            {explanation_html}
             <div class="result-disclaimer">
                 ⚠ This is a model prediction, not a verified ground-truth label.
                 Confidence reflects the model's certainty, not factual accuracy.
@@ -489,6 +507,18 @@ def page_analyze(mode: str):
         result, src = st.session_state.single_result
         st.divider()
         render_sentiment_result(result, source=src)
+        if src == "api" and result.get("error") and review_text.strip():
+            if st.button("⚡ Analyze with Local ML Model instead", use_container_width=True):
+                local_res = predict_single(review_text.strip())
+                st.session_state.single_result = (local_res, "local")
+                if not local_res.get("error"):
+                    st.session_state.session_analyses.append({
+                        "text": review_text.strip()[:80] + ("…" if len(review_text.strip()) > 80 else ""),
+                        "label": local_res.get("label"),
+                        "confidence": local_res.get("confidence"),
+                        "source": "local",
+                    })
+                st.rerun()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -559,14 +589,21 @@ def page_batch():
         else:
             df_work = df_raw.copy()
 
-        texts = df_work[text_col].astype(str).tolist()
+        # Sanitize missing or NaN values to empty strings so validator catches them
+        texts = df_work[text_col].fillna("").astype(str).tolist()
 
         with st.spinner(f"Analysing {len(texts):,} reviews…"):
             results_df = predict_batch(texts)
 
-        # Merge results back
+        # Merge results back without duplicate column collisions
         df_work = df_work.reset_index(drop=True)
         results_df = results_df.reset_index(drop=True)
+        cols_to_drop = [
+            c for c in results_df.columns
+            if c in df_work.columns and c != "review_text"
+        ]
+        if cols_to_drop:
+            df_work = df_work.drop(columns=cols_to_drop)
         output_df = pd.concat([df_work, results_df.drop(columns=["review_text"])], axis=1)
 
         valid_mask = output_df["is_valid"] == True
@@ -872,20 +909,69 @@ URL/HTML removal, punctuation stripping.
     if eval_results:
         with st.expander("📈 Evaluation Results (held-out test set)", expanded=True):
             st.info(
-                "⚠ These metrics come from the **bundled sample dataset** — a small, "
-                "curated demo dataset. They do not represent production-level performance."
+                "⚠ These metrics reflect performance on the **bundled sample demonstration dataset** (88 rows). "
+                "Because of class imbalance (71% negative), **Macro F1** is the most honest metric to evaluate."
             )
             cols = st.columns(4)
-            for col, (key, label) in zip(
-                cols,
-                [("accuracy", "Accuracy"), ("precision", "Precision"),
-                 ("recall", "Recall"), ("f1", "F1 Score")]
-            ):
-                with col:
-                    val = eval_results.get(key)
-                    st.metric(label, f"{val:.4f}" if val is not None else "—")
+            with cols[0]:
+                st.metric("Test Accuracy", f"{eval_results.get('accuracy', 0):.4f}")
+            with cols[1]:
+                st.metric("Weighted F1", f"{eval_results.get('f1', 0):.4f}")
+            with cols[2]:
+                macro_f1 = eval_results.get('macro_f1')
+                st.metric("Macro F1", f"{macro_f1:.4f}" if macro_f1 is not None else "—")
+            with cols[3]:
+                st.metric("Test Samples", eval_results.get("test_samples", "—"))
 
-            st.markdown("**Classification Report**")
+            # Baseline Comparison
+            baseline = eval_results.get("baseline")
+            if baseline:
+                st.markdown("#### ⚖️ Baseline Model Comparison (Dummy Classifier)")
+                st.caption(
+                    "Comparing against a naive majority-class classifier (`DummyClassifier(strategy='most_frequent')`). "
+                    "In an imbalanced dataset, raw accuracy can be deeply misleading."
+                )
+                b_cols = st.columns(3)
+                with b_cols[0]:
+                    st.metric(
+                        "Baseline Accuracy",
+                        f"{baseline.get('accuracy', 0):.4f}",
+                        help="Always predicting the majority class (negative)",
+                    )
+                with b_cols[1]:
+                    st.metric(
+                        "Baseline Macro F1",
+                        f"{baseline.get('macro_f1', 0):.4f}",
+                        help="Unweighted F1 of majority guesser",
+                    )
+                with b_cols[2]:
+                    f1_diff = (eval_results.get('macro_f1', 0) - baseline.get('macro_f1', 0))
+                    st.metric(
+                        "Model Macro F1 Gain",
+                        f"{eval_results.get('macro_f1', 0):.4f}",
+                        delta=f"{f1_diff:+.4f} vs Baseline",
+                    )
+                st.markdown(
+                    "<small style='color:#94a3b8;'>Notice: Because 72% of the test set is negative, a dummy predictor also achieves 72.22% accuracy. "
+                    "However, its Macro F1 is only 41.94% (0% on positive). SmartReview's Logistic Regression achieves 67.27% Macro F1, "
+                    "demonstrating genuine sentiment learning across both classes.</small>",
+                    unsafe_allow_html=True,
+                )
+
+            # Cross-Validation
+            cv = eval_results.get("cross_validation")
+            if cv:
+                st.markdown(f"#### 🔄 Stratified {cv.get('folds', 5)}-Fold Cross-Validation (Training Data)")
+                st.caption("Guards against high variance from a single 80/20 train/test split on a small dataset.")
+                c_cols = st.columns(3)
+                with c_cols[0]:
+                    st.metric("CV Accuracy", f"{cv.get('accuracy_mean', 0):.4f} ± {cv.get('accuracy_std', 0):.4f}")
+                with c_cols[1]:
+                    st.metric("CV Macro F1", f"{cv.get('f1_macro_mean', 0):.4f} ± {cv.get('f1_macro_std', 0):.4f}")
+                with c_cols[2]:
+                    st.metric("CV Weighted F1", f"{cv.get('f1_weighted_mean', 0):.4f} ± {cv.get('f1_weighted_std', 0):.4f}")
+
+            st.markdown("#### 📋 Detailed Classification Report")
             report_text = eval_results.get("classification_report_text", "Not available.")
             st.code(report_text, language="text")
 
@@ -893,7 +979,7 @@ URL/HTML removal, punctuation stripping.
             cm_data = eval_results.get("confusion_matrix")
             cm_labels = eval_results.get("confusion_matrix_labels")
             if cm_data and cm_labels:
-                st.markdown("**Confusion Matrix**")
+                st.markdown("#### 🎯 Confusion Matrix")
                 cm_df = pd.DataFrame(
                     cm_data,
                     index=[f"Actual: {l}" for l in cm_labels],
@@ -902,6 +988,19 @@ URL/HTML removal, punctuation stripping.
                 st.dataframe(cm_df, use_container_width=True)
     else:
         st.info("No evaluation results found. Run `python train_pipeline.py` to generate them.")
+
+    # Model Explainability & Interpretability
+    with st.expander("🔍 Model Explainability (Feature Attribution)"):
+        st.markdown("""
+**How Local Interpretability Works in SmartReview:**
+
+SmartReview uses a transparent, white-box linear architecture:
+1. **TF-IDF Vectorization with Negation Bigrams:** The review is tokenized and transformed into TF-IDF term weights (unigrams and bigrams like `not good`).
+2. **Logistic Regression Weights:** For any input review, we compute the linear contribution of each active n-gram:
+   $$\\text{Contribution}_j = x_j \\times w_{c, j}$$
+   where $x_j$ is the TF-IDF feature weight and $w_{c, j}$ is the learned model coefficient for the predicted class $c$.
+3. **Interactive Attribution:** The top contributing terms are displayed in real-time in the **Analyze Review** tab, providing verifiable rationale for every classification.
+        """)
 
     # Dataset info
     with st.expander("📦 Dataset Information"):

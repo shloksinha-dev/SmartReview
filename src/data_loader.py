@@ -174,7 +174,7 @@ def split_dataset(
         stratify=stratify,
     )
     logger.info(
-        "Split → train: %d rows, test: %d rows", len(train_df), len(test_df)
+        "Split -> train: %d rows, test: %d rows", len(train_df), len(test_df)
     )
     return train_df.reset_index(drop=True), test_df.reset_index(drop=True)
 

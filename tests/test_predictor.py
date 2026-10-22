@@ -10,6 +10,7 @@ from src.predictor import (
     validate_input,
     predict_single,
     predict_batch,
+    explain_prediction,
     reset_pipeline,
     MAX_INPUT_LENGTH,
     MIN_INPUT_LENGTH,
@@ -47,6 +48,12 @@ class TestValidateInput:
         ok, msg = validate_input("x" * (MAX_INPUT_LENGTH + 1))
         assert ok is False
         assert "length" in msg.lower() or "maximum" in msg.lower()
+
+    def test_placeholder_strings_rejected(self):
+        for placeholder in ["nan", "NaN", "null", "NULL", "none", "None", "<NA>"]:
+            ok, msg = validate_input(placeholder)
+            assert ok is False
+            assert "empty" in msg.lower() or "placeholder" in msg.lower()
 
     def test_exactly_min_length(self):
         ok, msg = validate_input("x" * MIN_INPUT_LENGTH)
@@ -167,3 +174,40 @@ class TestPredictBatch:
         valid_conf = result[result["is_valid"] == True]["confidence"].dropna()
         assert (valid_conf >= 0.0).all()
         assert (valid_conf <= 1.0).all()
+
+
+class TestExplainPrediction:
+    def test_explain_valid_positive_review(self):
+        explanation = explain_prediction("I love this item! Works great and very happy.")
+        assert isinstance(explanation, dict)
+        assert explanation["predicted_class"] == "positive"
+        assert len(explanation["signals"]) > 0
+        signal_terms = [s["term"] for s in explanation["signals"]]
+        assert any(t in signal_terms for t in ["love", "happy", "works", "very happy", "this"])
+        assert len(explanation["summary"]) > 0
+
+    def test_explain_valid_negative_review(self):
+        explanation = explain_prediction("Terrible quality, broke and awful waste of money.")
+        assert isinstance(explanation, dict)
+        assert explanation["predicted_class"] == "negative"
+        assert len(explanation["signals"]) > 0
+        assert len(explanation["summary"]) > 0
+
+    def test_explain_invalid_text(self):
+        explanation = explain_prediction("")
+        assert explanation["predicted_class"] is None
+        assert explanation["signals"] == []
+        assert "enter a review" in explanation["summary"]
+
+    def test_explain_out_of_vocab_text(self):
+        # A string of nonsense characters that will not match any vocabulary token
+        explanation = explain_prediction("zzqxjklm pqwertyu zzzbbbvvv")
+        assert explanation["predicted_class"] is None
+        assert explanation["signals"] == []
+        assert "vocabulary" in explanation["summary"]
+
+    def test_predict_single_contains_explanation(self):
+        res = predict_single("I love this product! Works great and very happy.")
+        assert "explanation" in res
+        assert isinstance(res["explanation"], dict)
+        assert res["explanation"]["predicted_class"] == "positive"

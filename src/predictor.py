@@ -65,6 +65,8 @@ def validate_input(text: str) -> Tuple[bool, str]:
     stripped = text.strip()
     if len(stripped) == 0:
         return False, "Please enter a review before analysing."
+    if stripped.lower() in {"nan", "null", "none", "<na>"}:
+        return False, "Review is empty or invalid (contains only placeholder/null text)."
     if len(stripped) < MIN_INPUT_LENGTH:
         return False, f"Review is too short (minimum {MIN_INPUT_LENGTH} characters)."
     if len(stripped) > MAX_INPUT_LENGTH:
@@ -73,6 +75,89 @@ def validate_input(text: str) -> Tuple[bool, str]:
             "Please shorten it."
         )
     return True, ""
+
+
+def explain_prediction(text: str, top_n: int = 5) -> Dict:
+    """
+    Explain a review prediction using TF-IDF feature weights and Logistic Regression coefficients.
+
+    Identifies which n-grams in the review had the greatest positive contribution
+    toward the predicted class.
+
+    Parameters
+    ----------
+    text : str
+    top_n : int
+        Maximum number of top driving terms to return.
+
+    Returns
+    -------
+    dict with keys: 'predicted_class', 'signals' (list of dicts), and 'summary'.
+    """
+    is_valid, error = validate_input(text)
+    if not is_valid:
+        return {"predicted_class": None, "signals": [], "summary": error}
+
+    pipeline = get_pipeline()
+    vectorizer = pipeline.named_steps.get("tfidf")
+    classifier = pipeline.named_steps.get("clf")
+
+    if vectorizer is None or classifier is None:
+        return {
+            "predicted_class": None,
+            "signals": [],
+            "summary": "Model pipeline components not available for explanation.",
+        }
+
+    x_vec = vectorizer.transform([text])
+    non_zero_indices = x_vec.indices
+
+    if len(non_zero_indices) == 0:
+        return {
+            "predicted_class": None,
+            "signals": [],
+            "summary": "None of the words in this review matched the training vocabulary.",
+        }
+
+    feature_names = vectorizer.get_feature_names_out()
+    classes = [str(c) for c in classifier.classes_]
+
+    proba_array = classifier.predict_proba(x_vec)[0]
+    pred_idx = int(np.argmax(proba_array))
+    predicted_class = str(classes[pred_idx])
+
+    if len(classes) == 2:
+        sign = 1.0 if pred_idx == 1 else -1.0
+        weights = sign * classifier.coef_[0]
+    else:
+        weights = classifier.coef_[pred_idx]
+
+    token_scores = []
+    for idx in non_zero_indices:
+        tfidf_val = x_vec[0, idx]
+        token = str(feature_names[idx])
+        contrib = float(weights[idx] * tfidf_val)
+        token_scores.append((token, contrib))
+
+    token_scores.sort(key=lambda item: item[1], reverse=True)
+
+    top_supporting = [
+        {"term": str(term), "score": round(float(score), 3), "supports": str(predicted_class)}
+        for term, score in token_scores[:top_n]
+        if score > 0
+    ]
+
+    if top_supporting:
+        terms_str = ", ".join(f"'{s['term']}'" for s in top_supporting[:3])
+        summary = f"Key terms supporting {predicted_class} classification: {terms_str}."
+    else:
+        summary = f"Classification ({predicted_class}) driven by broader document terms."
+
+    return {
+        "predicted_class": predicted_class,
+        "signals": top_supporting,
+        "summary": summary,
+    }
 
 
 def predict_single(text: str) -> Dict:
@@ -86,11 +171,12 @@ def predict_single(text: str) -> Dict:
     Returns
     -------
     dict with keys:
-        label       : str   — predicted sentiment class
-        confidence  : float — probability for the predicted class  (0–1)
-        probabilities : dict  — {class: probability} for all classes
-        input_valid : bool
-        error       : str | None
+        label         : str | None — predicted sentiment class
+        confidence    : float | None — probability for the predicted class (0–1)
+        probabilities : dict — {class: probability} for all classes
+        input_valid   : bool
+        error         : str | None
+        explanation   : dict | None — local feature interpretability
     """
     is_valid, error = validate_input(text)
     if not is_valid:
@@ -100,6 +186,7 @@ def predict_single(text: str) -> Dict:
             "probabilities": {},
             "input_valid": False,
             "error": error,
+            "explanation": None,
         }
 
     pipeline = get_pipeline()
@@ -108,6 +195,7 @@ def predict_single(text: str) -> Dict:
     probabilities = {cls: float(p) for cls, p in zip(classes, proba_array)}
     predicted_label = max(probabilities, key=probabilities.get)
     confidence = probabilities[predicted_label]
+    explanation = explain_prediction(text)
 
     return {
         "label": predicted_label,
@@ -115,6 +203,7 @@ def predict_single(text: str) -> Dict:
         "probabilities": probabilities,
         "input_valid": True,
         "error": None,
+        "explanation": explanation,
     }
 
 

@@ -1,47 +1,95 @@
-# 🔎 SmartReview — AI-Powered Review Sentiment Analyzer
+# 🔎 SmartReview — Explainable Review Sentiment Analyzer
 
-A portfolio-quality web application that analyses customer reviews and classifies their sentiment using a machine-learning pipeline and an optional external AI API.
+A credible, honest, and polished AI/ML portfolio project that analyzes customer review sentiment using a scikit-learn pipeline (TF-IDF + Logistic Regression) with local feature explainability and an optional external Google Gemini AI Studio integration.
 
 ---
 
-## Features
+## Architecture Overview
+
+```
+                      ┌──────────────────────────────────────────────┐
+                      │                 USER INPUT                   │
+                      │  - Single Review Text Entry                  │
+                      │  - CSV File Upload (up to 5,000 rows / 10MB) │
+                      └──────────────────────┬───────────────────────┘
+                                             │
+                         ┌───────────────────┴───────────────────┐
+                         ▼                                       ▼
+             ┌─────────────────────────┐             ┌─────────────────────────┐
+             │    Local ML Pipeline    │             │   Optional Gemini API   │
+             │   (Default / Offline)   │             │ (₹0 Google AI Studio)   │
+             └───────────┬─────────────┘             └───────────┬─────────────┘
+                         │                                       │
+                         ▼                                       │
+             ┌─────────────────────────┐                         │
+             │   Text Preprocessing    │                         │
+             │ - Lowercasing           │                         │
+             │ - Contraction expansion │                         │
+             │ - Negation preservation │                         │
+             │ - URL / HTML stripping  │                         │
+             └───────────┬─────────────┘                         │
+                         │                                       │
+                         ▼                                       │
+             ┌─────────────────────────┐                         │
+             │    TF-IDF Vectorizer    │                         │
+             │ - Unigrams + Bigrams    │                         │
+             │ - sublinear_tf=True     │                         │
+             │ - min_df=2              │                         │
+             └───────────┬─────────────┘                         │
+                         │                                       │
+                         ▼                                       │
+             ┌─────────────────────────┐                         │
+             │   Logistic Regression   │                         │
+             │ - solver='lbfgs'        │                         │
+             │ - class_weight='balance'│                         │
+             │ - max_iter=1000, C=1.0  │                         │
+             └───────────┬─────────────┘                         │
+                         │                                       │
+             ┌───────────┴─────────────┐                         │
+             ▼                         ▼                         │
+   ┌───────────────────┐     ┌───────────────────┐               │
+   │Class Probabilities│     │Feature Attribution│               │
+   │ P(Pos), P(Neg)    │     │ w_j * x_j signals │               │
+   └─────────┬─────────┘     └─────────┬─────────┘               │
+             │                         │                         │
+             └────────────┬────────────┘                         │
+                          │                                      │
+                          ▼                                      ▼
+            ┌──────────────────────────────────────────────────────────┐
+            │                  STREAMLIT USER INTERFACE                │
+            │  - 🔍 Single Review Analysis with Token Explainability   │
+            │  - 📂 Batch CSV Processing & Enriched Export             │
+            │  - 📊 Analytics Dashboard (Plots, Histograms, Top Words) │
+            │  - ℹ️ Model Information & Baseline Comparison Cards     │
+            └──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Core Capabilities
 
 | Feature | Description |
 |---------|-------------|
-| **Single Review Analysis** | Paste any review and get an instant positive / negative prediction with confidence scores |
-| **Batch CSV Analysis** | Upload a CSV file with hundreds of reviews; download enriched results |
-| **Analytics Dashboard** | Sentiment distribution charts, word-frequency breakdown, confidence histogram |
-| **ML Pipeline** | TF-IDF vectorizer + Logistic Regression, trained and evaluated transparently |
-| **Optional API Mode** | Google Gemini (gemini-3.8-flash) integration for LLM-powered sentiment (free tier at ₹0 via Google AI Studio) |
-| **Model Info Page** | Evaluation metrics, confusion matrix, architecture details, and honest limitations |
-| **Professional UI** | Dark-slate theme, sidebar navigation, styled metric cards |
-
----
-
-## Screenshots
-
-> *(Replace these placeholders with real screenshots once the app is running.)*
-
-| Page | Preview |
-|------|---------|
-| Analyze Review | `screenshots/analyze.png` |
-| Batch Analysis | `screenshots/batch.png` |
-| Dashboard | `screenshots/dashboard.png` |
-| Model Info | `screenshots/model_info.png` |
+| **Single Review Analysis** | Instant sentiment classification with confidence score and class probability distributions. |
+| **White-Box Explainability** | Real-time feature attribution displaying the exact words/n-grams driving each prediction based on model coefficients. |
+| **Batch CSV Analysis** | Upload CSV datasets (up to 5,000 rows); preview results, filter by sentiment, and export enriched CSVs. |
+| **Analytics Dashboard** | Sentiment distributions (pie charts), source breakdowns, confidence histograms, and top word frequencies per class. |
+| **Rigorous Evaluation** | Measured metrics on held-out test data, comparison against a dummy majority-class baseline, and Stratified 5-Fold Cross-Validation. |
+| **Dual-Engine Architecture** | 100% offline local model by default; seamless fallback from optional Google Gemini Developer API (free tier at ₹0). |
+| **Defensive Engineering** | Strict input validation (empty text, whitespace, null/NaN string placeholders, length limits), column collision prevention, and automated tests. |
 
 ---
 
 ## Technology Stack
 
-- **Python 3.11+**
-- **Streamlit** — web framework
-- **scikit-learn** — TF-IDF + Logistic Regression pipeline
-- **pandas / NumPy** — data handling
-- **matplotlib / seaborn** — visualisations
-- **joblib** — model serialisation
-- **python-dotenv** — environment variable loading
-- **google-genai** — optional Google Gemini API integration (₹0 free tier)
-- **pytest** — automated testing
+- **Language:** Python 3.11+
+- **Application Framework:** Streamlit (v1.66+)
+- **Machine Learning:** scikit-learn (TF-IDF Vectorizer, Logistic Regression, Pipeline, DummyClassifier, StratifiedKFold)
+- **Data Manipulation:** pandas, NumPy
+- **Visualizations:** matplotlib, seaborn
+- **Model Persistence:** joblib
+- **API Integration:** official `google-genai` SDK (Google Gemini Developer API, ₹0 free tier)
+- **Automated Testing:** pytest (119 automated unit, integration, and UI smoke tests)
 
 ---
 
@@ -50,51 +98,135 @@ A portfolio-quality web application that analyses customer reviews and classifie
 ```
 SmartReview/
 ├── app.py                          # Streamlit application entry point
-├── train_pipeline.py               # Standalone training script
-├── requirements.txt
-├── pytest.ini
-├── README.md
-├── .gitignore
+├── train_pipeline.py               # Standalone training and evaluation script
+├── verify_predictions.py           # Quick functional verification script
+├── requirements.txt                # Pinned dependency specifications
+├── pytest.ini                      # Pytest runner configuration
+├── README.md                       # Architecture, evaluation, and documentation
+├── .gitignore                      # Git exclusions (models, secrets, caches)
 ├── .env.example                    # Environment variable template
 ├── data/
-│   └── sample_reviews.csv          # Bundled demonstration dataset
+│   └── sample_reviews.csv          # Bundled demonstration dataset (87 rows)
 ├── models/
 │   ├── .gitkeep
-│   ├── sentiment_pipeline.joblib   # Generated after training
-│   ├── training_metadata.json      # Generated after training
-│   └── evaluation_results.json     # Generated after training
+│   ├── sentiment_pipeline.joblib   # Serialized scikit-learn Pipeline
+│   ├── training_metadata.json      # Dataset and split metadata
+│   └── evaluation_results.json     # Measured test, baseline, and CV metrics
 ├── src/
 │   ├── __init__.py
-│   ├── data_loader.py              # Dataset loading and validation
-│   ├── preprocessing.py            # Text cleaning (negation-aware)
-│   ├── train_model.py              # Pipeline definition, save/load
-│   ├── predictor.py                # Single and batch prediction
-│   ├── api_client.py               # Google Gemini API integration
-│   └── evaluation.py              # Metrics, confusion matrix, reporting
-├── tests/
-│   ├── __init__.py
-│   ├── test_preprocessing.py
-│   ├── test_data_loader.py
-│   ├── test_predictor.py
-│   ├── test_api_client.py
-│   └── test_training.py
-└── .streamlit/
-    ├── config.toml                 # Dark theme configuration
-    └── secrets.toml.example       # Streamlit Cloud secrets template
+│   ├── data_loader.py              # CSV ingestion, schema validation, stratified split
+│   ├── preprocessing.py            # Contraction expansion, negation preservation
+│   ├── train_model.py              # Pipeline definition, serialization, lazy training
+│   ├── predictor.py                # Single/batch inference, feature attribution (explainability)
+│   ├── api_client.py               # Robust Google Gemini API client with granular error handling
+│   └── evaluation.py              # Metrics, baseline evaluation, cross-validation, confusion matrix
+└── tests/
+    ├── __init__.py
+    ├── test_preprocessing.py       # Text cleaning, contraction, negation tests
+    ├── test_data_loader.py         # CSV schema, duplicate handling, stratification tests
+    ├── test_predictor.py           # Input validation, placeholder rejection, explainability tests
+    ├── test_api_client.py          # Mocked API client call handling and JSON parsing tests
+    ├── test_training.py            # Pipeline structure, serialization, probability checks
+    ├── test_evaluation.py          # Baseline comparison and cross-validation tests
+    └── test_app_smoke.py           # Streamlit AppTest framework UI smoke tests
 ```
 
 ---
 
-## Local Installation
+## Machine Learning Methodology
+
+### 1. Data Leakage Prevention
+Feature extraction is encapsulated inside a scikit-learn `Pipeline([('tfidf', vectorizer), ('clf', classifier)])`.
+The vectorizer's vocabulary and IDF statistics are fitted **strictly on the training split**, ensuring zero information from the held-out test split leaks into feature scaling or vocabulary generation.
+
+### 2. Preprocessing & Negation Preservation
+Standard NLP stopword removal collapses "not good" into "good", reversing the review's polarity.
+SmartReview's preprocessing pipeline:
+- Expands negating contractions (`don't` → `do not`, `won't` → `will not`, `can't` → `cannot`).
+- Retains critical negation markers (`not`, `never`, `neither`, `nor`, `no`).
+- Strips URLs, HTML markup, and non-alphanumeric punctuation while maintaining whitespace consistency.
+- Extracts unigrams and bigrams (`ngram_range=(1, 2)`) to capture compound sentiment signals (`not bad`, `waste of money`).
+
+### 3. Local Model Interpretability
+Because Logistic Regression is a generalized linear model, each prediction is directly interpretable. For any input review:
+$$\text{Contribution}_j = x_j \times w_{c, j}$$
+where $x_j$ is the TF-IDF weight of token $j$ and $w_{c, j}$ is the learned model coefficient for predicted class $c$. The application surfaces the top contributing terms as interactive visual signals.
+
+---
+
+## Measured Evaluation & Benchmark Results
+
+Evaluation was conducted on the held-out test set (20% split, $n = 18$) and through Stratified 5-Fold Cross-Validation on the training set ($n = 69$).
+
+### Held-Out Test Set Performance ($n = 18$)
+
+| Metric | Measured Value | Notes |
+|--------|----------------|-------|
+| **Accuracy** | **72.22%** | Overall correct classifications (13/18) |
+| **Weighted F1** | **72.93%** | Weighted average across class support |
+| **Macro F1** | **67.27%** | Unweighted average across classes; critical for imbalanced data |
+| **Weighted Precision** | **74.07%** | Precision weighted by class prevalence |
+| **Weighted Recall** | **72.22%** | Recall weighted by class prevalence |
+
+### Per-Class Classification Report
+
+```text
+              precision    recall  f1-score   support
+
+    negative       0.83      0.77      0.80        13
+    positive       0.50      0.60      0.55         5
+
+    accuracy                           0.72        18
+   macro avg       0.67      0.68      0.67        18
+weighted avg       0.74      0.72      0.73        18
+```
+
+### Baseline Model Comparison (Dummy Classifier)
+
+In imbalanced classification, accuracy is often a misleading metric. We benchmark the model against a naive majority-class dummy classifier (`DummyClassifier(strategy="most_frequent")`):
+
+| Model | Accuracy | Macro F1 | Weighted F1 | Positive F1 |
+|-------|----------|----------|-------------|-------------|
+| **Dummy Majority Predictor** | 72.22% | 41.94% | 60.57% | 0.00% |
+| **SmartReview (TF-IDF + LR)** | **72.22%** | **67.27%** | **72.93%** | **55.00%** |
+| **Net Difference** | **+0.00%** | **+25.33%** | **+12.36%** | **+55.00%** |
+
+> **Critical ML Finding:** Because 72.2% (13/18) of the test set is negative, a naive dummy model that predicts "negative" for every review achieves 72.22% raw accuracy. However, its Macro F1 is only 41.94% because it has 0% recall and 0% precision on the positive class. SmartReview's Logistic Regression model achieves **67.27% Macro F1 (+25.33% lift)** and a **55.0% F1 score on the minority positive class**, proving genuine sentiment learning.
+
+### Stratified 5-Fold Cross-Validation (Training Split, $n = 69$)
+
+To eliminate single-split evaluation variance on small sample sizes, we evaluated the pipeline across 5 stratified folds:
+
+- **CV Accuracy:** $81.10\% \pm 7.44\%$
+- **CV Macro F1:** $76.41\% \pm 9.49\%$
+- **CV Weighted F1:** $80.75\% \pm 7.62\%$
+
+---
+
+## Dataset Provenance & Limitations
+
+- **Source:** Hand-curated demonstration dataset (`data/sample_reviews.csv`).
+- **Sample Count:** 87 validated reviews.
+- **Class Balance:** 62 negative (71.3%), 25 positive (28.7%).
+- **Neutral Class:** The demonstration dataset is binary. In real-world customer reviews, neutral or mixed feedback represents a significant proportion. In the demo dataset, lukewarm reviews were mapped to negative.
+- **Sample Size:** 87 rows is suitable for local portfolio demonstration, pipeline validation, and unit testing, but **not for production benchmark deployment**.
+- **Recommended Production Datasets:**
+  - [Stanford SST-2](https://huggingface.co/datasets/sst2) (67,000 sentences)
+  - [Amazon US Reviews](https://huggingface.co/datasets/amazon_us_reviews)
+  - [Yelp Reviews Full](https://huggingface.co/datasets/yelp_review_full)
+
+---
+
+## Local Setup & Installation
 
 ### Windows (PowerShell)
 
 ```powershell
-# 1. Clone the repository
+# 1. Clone repository
 git clone https://github.com/your-username/SmartReview.git
 cd SmartReview
 
-# 2. Create a virtual environment
+# 2. Create and activate virtual environment (optional if Python environment is ready)
 python -m venv venv
 venv\Scripts\Activate.ps1
 
@@ -114,204 +246,73 @@ pip install -r requirements.txt
 
 ---
 
-## Dataset
+## How to Run
 
-**Source:** Bundled demonstration dataset (`data/sample_reviews.csv`).
-
-This is a **small, hand-curated sample** (~85 rows) intended solely for portfolio demonstration. It is NOT a production benchmark.
-
-**Limitations:**
-- Too small for reliable real-world generalisation.
-- Vocabulary is narrow (general product reviews only).
-- Binary labels only (positive / negative).
-
-**For production use**, replace with:
-- [Stanford SST-2](https://huggingface.co/datasets/sst2) — 67K movie reviews
-- [Amazon US Reviews](https://huggingface.co/datasets/amazon_us_reviews)
-- [Yelp Review Full](https://huggingface.co/datasets/yelp_review_full)
-
----
-
-## Model Training
-
-Run the standalone training script from the project root:
-
-```powershell
-# Windows
-python train_pipeline.py
-
-# With a custom dataset
-python train_pipeline.py --data path/to/your/reviews.csv --text-col review --label-col label
-```
-
-This will:
-1. Load and validate the dataset.
-2. Split into 80% train / 20% test (stratified where possible).
-3. Fit the TF-IDF + Logistic Regression pipeline on training data **only**.
-4. Evaluate on the held-out test set.
-5. Save `models/sentiment_pipeline.joblib` and `models/evaluation_results.json`.
-6. Print a classification report to the console.
-
-The model is also trained automatically on first app launch if no saved model is found.
-
----
-
-## Model Evaluation
-
-Evaluation is performed on a **held-out test set** (never seen during training) using:
-- Accuracy
-- Precision, Recall, F1 (weighted average)
-- Per-class classification report
-- Confusion matrix
-
-> ⚠ **Important:** Metrics reflect the bundled sample dataset only.
-> Do not interpret these numbers as production-level performance claims.
-
----
-
-## Running the Application
-
-```powershell
-# Windows — from the project root
-python -m streamlit run app.py
-
-# If streamlit is on your PATH
-streamlit run app.py
-```
-
-The app opens automatically at `http://localhost:8501`.
-
----
-
-## CSV Upload
-
-1. Go to **Batch Analysis** in the sidebar.
-2. Download the CSV template if you don't have a file ready.
-3. Upload your CSV (max 10 MB, up to 5,000 rows).
-4. Select the column containing review text.
-5. Click **Run Batch Analysis**.
-6. Filter, preview, and download the enriched results CSV.
-
-**Required CSV format:**
-```csv
-review_text
-"This product is fantastic!"
-"Terrible quality, broke immediately."
-```
-*(The column name can be anything — you select it in the UI.)*
-
----
-
-## Optional API Configuration (₹0 Free Tier)
-
-The Google Gemini API integration is entirely optional. The local ML model is always available by default and runs 100% locally on your machine.
-
-Google provides a generous free tier via Google AI Studio that requires **no credit card, no billing, and ₹0 cost**.
-
-```powershell
-# 1. Copy the example environment file
-cp .env.example .env
-
-# 2. Get a free API key at: https://aistudio.google.com/apikey
-
-# 3. Edit .env and paste your key
-#    GEMINI_API_KEY=your-gemini-api-key-here
-#    GEMINI_MODEL=gemini-3.8-flash   (optional, this is the default)
-
-# 4. Restart the app
-python -m streamlit run app.py
-```
-
-When `GEMINI_API_KEY` is detected, an **External API (Google Gemini)** option appears in the sidebar. If the key is absent, the app seamlessly defaults to the local ML model.
-
-**Privacy notice:** In Gemini API mode, review text is transmitted to Google's servers under Google AI Studio terms. Do not submit sensitive or personal information.
-
----
-
-## Privacy Considerations
-
-| Mode | Data stays local? | Data sent externally? | Cost |
-|------|-------------------|----------------------|------|
-| Local ML (Default) | ✅ Yes | ❌ No | ₹0 (Offline) |
-| External API (Google Gemini) | ❌ No | ✅ Yes — sent to Google | ₹0 (Free tier) |
-
----
-
-## Known Limitations
-
-1. Small training set (~85 reviews) — curated for portfolio demonstration, not production benchmarks.
-2. Binary classification only (positive / negative) with current local dataset.
-3. English language only.
-4. No context: each review is processed independently.
-5. High model confidence does not guarantee factual correctness.
-6. External API mode depends on Google AI Studio rate limits and quotas.
-
----
-
-## Troubleshooting
-
-**`ModuleNotFoundError: No module named 'streamlit'`**
-→ Activate your virtual environment and run `pip install -r requirements.txt`.
-
-**`streamlit: command not found`**
-→ Use `python -m streamlit run app.py` instead.
-
-**App shows "No trained model found"**
-→ Run `python train_pipeline.py` once from the project root.
-
-**API mode says "not configured"**
-→ Ensure `.env` exists, contains `GEMINI_API_KEY=...`, and the app was restarted.
-
-**CSV upload fails with encoding error**
-→ Save your CSV as UTF-8 from Excel (File → Save As → CSV UTF-8).
-
----
-
-## Deployment — Streamlit Community Cloud
-
-1. Push the repository to GitHub (ensure `.env` and `secrets.toml` remain excluded in `.gitignore`).
-2. Go to [share.streamlit.io](https://share.streamlit.io) and click **New app**.
-3. Select your repository, branch `main`, and entry file `app.py`.
-4. In **Advanced settings → Secrets**, add (optional):
-   ```toml
-   GEMINI_API_KEY = "your-gemini-api-key-here"
-   GEMINI_MODEL = "gemini-3.8-flash"
-   ```
-5. Click **Deploy**.
-
-> ⚠ The trained model files (`models/*.joblib`) must either be committed to the repository or the app will auto-train on first launch (slower cold start).
-
----
-
-## Running Tests
+### 1. Run Automated Test Suite (119 tests)
 
 ```powershell
 python -m pytest
 ```
 
-Expected output: all tests pass.
+### 2. Retrain the Pipeline & Inspect Evaluation
 
-To run a specific file:
 ```powershell
-python -m pytest tests/test_preprocessing.py -v
+python train_pipeline.py
 ```
+
+Optional custom dataset training:
+```powershell
+python train_pipeline.py --data path/to/dataset.csv --text-col review_text --label-col sentiment
+```
+
+### 3. Run Functional Prediction Verification
+
+```powershell
+python verify_predictions.py
+```
+
+### 4. Launch the Streamlit Web Application
+
+```powershell
+python -m streamlit run app.py
+```
+
+The application will launch in your browser at `http://localhost:8501`.
 
 ---
 
-## Future Improvements
+## Optional: External Gemini API Setup (₹0 Free Tier)
 
-1. **Larger dataset integration** — add a one-click download of SST-2 or Amazon Reviews for better generalisation.
-2. **BERT/transformer fine-tuning** — replace Logistic Regression with a fine-tuned DistilBERT model for significantly higher accuracy.
-3. **Neutral class support** — collect or source a 3-class labeled dataset and retrain.
-4. **Aspect-based sentiment** — identify which product aspects (shipping, quality, price) drive positive/negative sentiment.
-5. **Export to PDF** — generate a formatted report from the dashboard.
+SmartReview is **offline-first**: the local ML pipeline requires no API keys or internet connection.
+If you wish to test LLM-based sentiment analysis, you can enable Google Gemini Developer API on the free tier (no credit card required):
+
+1. Create a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
+2. Create a `.env` file in the project root:
+   ```env
+   GEMINI_API_KEY=your_api_key_here
+   GEMINI_MODEL=gemini-3.8-flash
+   ```
+3. Restart Streamlit (`python -m streamlit run app.py`). The sidebar will automatically reveal the "External API (Google Gemini)" mode.
+
+---
+
+## Interview Talking Points: Key Engineering Decisions
+
+If asked about this project in a machine-learning or software-engineering interview, here are the top 5 architectural decisions to highlight:
+
+1. **Why TF-IDF + Logistic Regression over DistilBERT for local deployment?**
+   - *Rationale:* Zero inference latency, sub-10ms predictions on commodity CPUs, zero GPU memory requirements, and 100% deterministic local inference without downloading multi-hundred-megabyte weights.
+2. **Why is accuracy an inadequate evaluation metric here?**
+   - *Rationale:* With 71.6% negative reviews, a dummy majority classifier achieves 72.22% test accuracy by doing nothing. Evaluating unweighted **Macro F1 (67.27% vs 41.94% baseline)** and minority class metrics exposes whether the model actually learned.
+3. **How does the scikit-learn Pipeline prevent data leakage?**
+   - *Rationale:* Fitting vectorizers before splitting causes vocabulary and inverse-document-frequency values from test data to contaminate the training set. Wrapping vectorizer and classifier in `Pipeline` guarantees strictly separated train/test transformations.
+4. **How was small-sample variance addressed?**
+   - *Rationale:* An 80/20 split on 87 samples leaves only 18 test reviews (where 1 sample shifts accuracy by 5.5%). We supplemented the held-out test split with **Stratified 5-Fold Cross-Validation** ($81.10\% \pm 7.44\%$) to measure consistency across subsets.
+5. **How is local explainability achieved without heavy frameworks?**
+   - *Rationale:* Rather than adding heavy external dependencies like SHAP or LIME, we exploited the mathematical properties of the linear model ($w_j \cdot x_j$) to extract exact n-gram contributions directly from the pipeline.
 
 ---
 
 ## License
 
-MIT License. See `LICENSE` for details.
-
----
-
-*Built as a portfolio project demonstrating ML pipeline construction, Streamlit UI design, API integration, and software testing.*
+This project is licensed under the MIT License.

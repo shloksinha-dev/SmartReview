@@ -37,4 +37,17 @@ r5 = predict_single("Excellent product, highly recommended.")
 total = sum(r5["probabilities"].values())
 print("TEST 6 - Probabilities sum to 1: {} (diff={:.8f})".format(abs(total - 1.0) < 1e-6, abs(total - 1.0)))
 
+# Test 7: Local feature interpretability
+r7 = predict_single("I love this product, it works great and very happy!")
+print("TEST 7 - Feature interpretability:")
+if r7.get("explanation") and r7["explanation"].get("signals"):
+    terms = [s["term"] for s in r7["explanation"]["signals"]]
+    print("  driving signals: {}".format(terms))
+else:
+    print("  explanation summary: {}".format(r7.get("explanation", {}).get("summary")))
+
+# Test 8: Placeholder input validation
+r8 = predict_single("nan")
+print("TEST 8 - Placeholder input rejected: {}".format(not r8["input_valid"]))
+
 print("\nAll functional checks complete.")
